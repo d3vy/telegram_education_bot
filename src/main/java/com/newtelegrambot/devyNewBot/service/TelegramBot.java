@@ -2,6 +2,7 @@ package com.newtelegrambot.devyNewBot.service;
 
 import com.newtelegrambot.devyNewBot.config.BotConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -22,19 +23,9 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 	final BotConfig config;
 
-	static final String HELP_TEXT =
 
-			"""
-					This bot is created to help pupils save their homework, check it later and then delete.\s
-					
-					You can execute commands from the main manu on the left or by typing a command:
-					
-					Type /start to see a welcome message
-					
-					Type /mydata to see data stored about yourself
-					
-					Type /help to see this message again)
-					""";
+	@Value("${help.text}")
+	static final String HELP_TEXT = "";
 
 	public TelegramBot(BotConfig config) {
 		this.config = config;
