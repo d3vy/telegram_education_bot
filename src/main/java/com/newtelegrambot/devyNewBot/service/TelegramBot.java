@@ -1,7 +1,10 @@
 package com.newtelegrambot.devyNewBot.service;
 
 import com.newtelegrambot.devyNewBot.config.BotConfig;
+import com.newtelegrambot.devyNewBot.models.User;
+import com.newtelegrambot.devyNewBot.repositories.UserRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.grizzly.http.util.TimeStamp;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -22,13 +25,28 @@ import java.util.List;
 public class TelegramBot extends TelegramLongPollingBot {
 
 	final BotConfig config;
-
+	private final UserRepository userRepository;
 
 	@Value("${help.text}")
-	static final String HELP_TEXT = "";
+	static final String HELP_TEXT =
 
-	public TelegramBot(BotConfig config) {
+			"""
+					This bot is created to help pupils save their homework, check it later and then delete.\s
+					
+					You can execute commands from the main manu on the left or by typing a command:
+					
+					Type /start to see a welcome message
+					
+					Type /mydata to see data stored about yourself
+					
+					Type /help to see this message again)
+					
+					Type /clear to clear chat history
+					""";
+
+	public TelegramBot(BotConfig config, UserRepository userRepository) {
 		this.config = config;
+		this.userRepository = userRepository;
 		List<BotCommand> listOfCommands = new ArrayList<>();
 		listOfCommands.add(new BotCommand("/start", "get a welcome message"));
 		listOfCommands.add(new BotCommand("/help", "info about the bot"));
@@ -62,6 +80,9 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 			switch (message) {
 				case "/start":
+
+					registerUser(update.getMessage());
+
 					startCommandReceived(chatId, update.getMessage().getChat().getFirstName());
 					break;
 				case "/help":
@@ -75,6 +96,26 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
 			}
+		}
+	}
+
+	private void registerUser(Message message) {
+		if (userRepository.findById(message.getChatId()).isEmpty()) {
+
+			var chatId = message.getChatId();
+			var chat = message.getChat();
+
+			User user = new User();
+
+			user.setChatId(chatId);
+			user.setFirstname(chat.getFirstName());
+			user.setLastname(chat.getLastName());
+			user.setUsername(chat.getUserName());
+			user.setRegisterAt(new TimeStamp());
+
+			userRepository.save(user);
+
+			log.info("User " + user + " saved");
 		}
 	}
 
