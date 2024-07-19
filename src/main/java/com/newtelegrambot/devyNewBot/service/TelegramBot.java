@@ -7,6 +7,7 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
@@ -67,7 +68,6 @@ public class TelegramBot extends TelegramLongPollingBot {
 		if (update.hasMessage() && update.getMessage().hasText()) {
 			String message = update.getMessage().getText();
 			Long chatId = update.getMessage().getChatId();
-			int messageId = Integer.parseInt(String.valueOf(update.getMessage().getMessageId()));
 
 			switch (message) {
 				case "/start":
@@ -77,7 +77,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 					sendMessage(chatId, HELP_TEXT);
 					break;
 				case "/clear":
-					clearChatHistory(chatId, messageId);
+					clearChatHistory(chatId);
 					break;
 				default:
 					sendMessage(chatId, "Command wasn't recognized");
@@ -111,15 +111,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 	}
 
-	private void clearChatHistory(long chatId, int messageId ) {
-		DeleteMessage deleteMessage = new DeleteMessage();
-		deleteMessage.setChatId(chatId);
-		deleteMessage.setMessageId(messageId);
-		try {
-			execute(deleteMessage);
-		}catch (TelegramApiException e){
-			log.error(e.getMessage());
-		}
-
+	private void clearChatHistory(long chatId) {
+		sendMessage(chatId, "Messages have been deleted");
 	}
 }
