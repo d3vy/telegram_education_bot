@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
@@ -23,22 +24,23 @@ public class TelegramBot extends TelegramLongPollingBot {
 	static final String HELP_TEXT =
 
 			"""
-			This bot is created to help pupils save their homework, check it later and then delete.\s
-			
-			You can execute commands from the main manu on the left or by typing a command:
-			
-			Type /start to see a welcome message
-			
-			Type /mydata to see data stored about yourself
-			
-			Type /help to see this message again)
-			""";
+					This bot is created to help pupils save their homework, check it later and then delete.\s
+					
+					You can execute commands from the main manu on the left or by typing a command:
+					
+					Type /start to see a welcome message
+					
+					Type /mydata to see data stored about yourself
+					
+					Type /help to see this message again)
+					""";
 
 	public TelegramBot(BotConfig config) {
 		this.config = config;
 		List<BotCommand> listOfCommands = new ArrayList<>();
 		listOfCommands.add(new BotCommand("/start", "get a welcome message"));
 		listOfCommands.add(new BotCommand("/help", "info about the bot"));
+		listOfCommands.add(new BotCommand("/clear", "clear bot history"));
 		listOfCommands.add(new BotCommand("/mydata", "get your data stored"));
 		listOfCommands.add(new BotCommand("/deletedata", "delete my data"));
 		listOfCommands.add(new BotCommand("/settings", "set your preferences"));
@@ -76,7 +78,8 @@ public class TelegramBot extends TelegramLongPollingBot {
 				default:
 					sendMessage(chatId, "Command wasn't recognized");
 
-
+				case "/clear":
+					clearChatHistory(chatId);
 			}
 		}
 	}
@@ -102,5 +105,17 @@ public class TelegramBot extends TelegramLongPollingBot {
 		} catch (TelegramApiException e) {
 			log.error(e.getMessage());
 		}
+
+	}
+
+	private void clearChatHistory(long chatId) {
+		DeleteMessage deleteMessage = new DeleteMessage();
+		deleteMessage.setChatId(chatId);
+		try {
+			execute(deleteMessage);
+		}catch (TelegramApiException e){
+			log.error(e.getMessage());
+		}
+
 	}
 }
