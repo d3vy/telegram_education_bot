@@ -67,6 +67,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 		if (update.hasMessage() && update.getMessage().hasText()) {
 			String message = update.getMessage().getText();
 			Long chatId = update.getMessage().getChatId();
+			int messageId = Integer.parseInt(String.valueOf(update.getMessage().getMessageId()));
 
 			switch (message) {
 				case "/start":
@@ -75,11 +76,13 @@ public class TelegramBot extends TelegramLongPollingBot {
 				case "/help":
 					sendMessage(chatId, HELP_TEXT);
 					break;
+				case "/clear":
+					clearChatHistory(chatId, messageId);
+					break;
 				default:
 					sendMessage(chatId, "Command wasn't recognized");
 
-				case "/clear":
-					clearChatHistory(chatId);
+
 			}
 		}
 	}
@@ -108,9 +111,10 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 	}
 
-	private void clearChatHistory(long chatId) {
+	private void clearChatHistory(long chatId, int messageId ) {
 		DeleteMessage deleteMessage = new DeleteMessage();
 		deleteMessage.setChatId(chatId);
+		deleteMessage.setMessageId(messageId);
 		try {
 			execute(deleteMessage);
 		}catch (TelegramApiException e){
