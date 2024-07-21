@@ -11,6 +11,7 @@ import org.glassfish.grizzly.http.util.TimeStamp;
 @Entity
 public class User {
 
+	//Поля таблицы.
 	@Id
 	private Long chatId;
 
@@ -20,6 +21,7 @@ public class User {
 	private long registerAt;
 
 
+	//Переопределение метода toString().
 	@Override
 	public String toString() {
 		return "User{" +

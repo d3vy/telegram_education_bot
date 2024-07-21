@@ -10,6 +10,7 @@ import org.springframework.context.annotation.PropertySource;
 @PropertySource("application.properties")
 public class BotConfig {
 
+	//Конфигурация бота. Это все поля, которые он имеет.
 	@Value("${bot.name}")
 	String botName;
 	@Value("${bot.token}")

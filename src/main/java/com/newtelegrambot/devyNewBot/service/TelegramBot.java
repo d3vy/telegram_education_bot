@@ -3,6 +3,7 @@ package com.newtelegrambot.devyNewBot.service;
 import com.newtelegrambot.devyNewBot.config.BotConfig;
 import com.newtelegrambot.devyNewBot.models.User;
 import com.newtelegrambot.devyNewBot.repositories.UserRepository;
+import com.vdurmont.emoji.EmojiParser;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.grizzly.http.util.TimeStamp;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,9 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
@@ -28,6 +32,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 	final BotConfig config;
 	private final UserRepository userRepository;
 
+	//Константа для команды /help: выводить пользователю все возможные команды.
 	@Value("${help.text}")
 	static final String HELP_TEXT =
 
@@ -45,6 +50,9 @@ public class TelegramBot extends TelegramLongPollingBot {
 					Type /clear to clear chat history
 					""";
 
+
+	//Создание бота.
+	//Здесь определяются команды для использования бота.
 	public TelegramBot(BotConfig config, UserRepository userRepository) {
 		this.config = config;
 		this.userRepository = userRepository;
@@ -62,16 +70,21 @@ public class TelegramBot extends TelegramLongPollingBot {
 		}
 	}
 
+
+	//Получение имени бота.
 	@Override
 	public String getBotUsername() {
 		return config.getBotName();
 	}
 
+	//Получение токена бота.
 	@Override
 	public String getBotToken() {
 		return config.getToken();
 	}
 
+
+	//Бизес-логика для обработки команд.
 	@Override
 	public void onUpdateReceived(Update update) {
 
@@ -94,12 +107,11 @@ public class TelegramBot extends TelegramLongPollingBot {
 					break;
 				default:
 					sendMessage(chatId, "Command wasn't recognized");
-
-
 			}
 		}
 	}
 
+	//Метод, отвечающий за регистрацию пользователя при нажатии на кнопку start.
 	private void registerUser(Message message) {
 		if (userRepository.findById(message.getChatId()).isEmpty()) {
 
@@ -120,30 +132,69 @@ public class TelegramBot extends TelegramLongPollingBot {
 		}
 	}
 
+
+	//Метод, отвечающий за команду /start.
 	private void startCommandReceived(long chatId, String name) {
 
-		String answer = "Hello, " + name + ", nice to meet you!";
-		log.info("Replied to user " + name + " with answer: " + answer);
+		//Ответ пользователю после нажатия на кнопку start. ":smirk_cat:" - это смайлик.
+		String answer = EmojiParser.parseToUnicode("Hello, " + name + " nice to meet you!" + " :smirk_cat:");
 
+		//Вывод логов в определенный файл.
+		log.info("Replied to user " + name + " with answer: " + answer);
 
 		sendMessage(chatId, answer);
 	}
 
+	//Метод, отвечающий за отпарвку определенного сообщения от бота пользователю.
 	private void sendMessage(long chatId, String messageToSend) {
 		SendMessage message = new SendMessage();
-
-		//Может вызвать ошибку. Можно заменить на String.valueOf(chatId)
 		message.setChatId(chatId);
 		message.setText(messageToSend);
 
+		//Инициализация клавиатуры для выбора сдедующего действия.
+		ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+
+		//Лист, содержащий все кнопки клавиаутры.
+		List<KeyboardRow> keyboardRows = new ArrayList<>();
+
+		//Инициализация ряда кнопок.
+		KeyboardRow row = new KeyboardRow();
+
+		//Добавление кнопок в ряд.
+		row.add("weather");
+		row.add("random joke");
+
+		//Добавление ряда в лист рядов с кнопоками.
+		//Ряд, который добавляется первым, становится верхним.
+		keyboardRows.add(row);
+
+		//Создание нового ряда
+		row = new KeyboardRow();
+		row.add("register");
+		row.add("check my data");
+		row.add("delete my data");
+		keyboardRows.add(row);
+
+		//Создание клавиатуры.
+		keyboardMarkup.setKeyboard(keyboardRows);
+
+		//Привязка клавиатуры к сообщению,
+		// чтобы бот отправлял ее в ответ на сообщение пользователя.
+		//Одна и та же клавиатура будет отображаться после любого сообщенгия.
+
+		//В будущем хотел бы сделать так, чтобы клавиатура отличалась в зависимости от типа сообщения.
+		message.setReplyMarkup(keyboardMarkup);
+
 		try {
+			//Отпарвка сообщения.
 			execute(message);
 		} catch (TelegramApiException e) {
+			//Вывод логов при ошибке.
 			log.error(e.getMessage());
 		}
 
 	}
-
+	//Метод, отвечающий за очистку чата при нажатии на кнопку clear.
 	private void clearChatHistory(long chatId) {
 		sendMessage(chatId, "Messages have been deleted");
 	}
