@@ -18,6 +18,7 @@ import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScope
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 @Slf4j
@@ -111,11 +112,11 @@ public class TelegramBot extends TelegramLongPollingBot {
 			user.setFirstname(chat.getFirstName());
 			user.setLastname(chat.getLastName());
 			user.setUsername(chat.getUserName());
-			user.setRegisterAt(new TimeStamp());
+			user.setRegisterAt(System.currentTimeMillis());
 
 			userRepository.save(user);
 
-			log.info("User " + user + " saved");
+            log.info("User {} saved", user);
 		}
 	}
 
