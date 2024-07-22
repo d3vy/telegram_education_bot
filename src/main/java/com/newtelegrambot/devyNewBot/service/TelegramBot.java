@@ -5,24 +5,23 @@ import com.newtelegrambot.devyNewBot.models.User;
 import com.newtelegrambot.devyNewBot.repositories.UserRepository;
 import com.vdurmont.emoji.EmojiParser;
 import lombok.extern.slf4j.Slf4j;
-import org.glassfish.grizzly.http.util.TimeStamp;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
 @Slf4j
@@ -31,6 +30,9 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 	final BotConfig config;
 	private final UserRepository userRepository;
+
+	static final String noButtonId = "NO_BUTTON";
+	static final String yesButtonId = "YES_BUTTON";
 
 	//Константа для команды /help: выводить пользователю все возможные команды.
 	@Value("${help.text}")
@@ -105,9 +107,103 @@ public class TelegramBot extends TelegramLongPollingBot {
 				case "/clear":
 					clearChatHistory(chatId);
 					break;
+				case "/register":
+					register(chatId);
+					break;
 				default:
 					sendMessage(chatId, "Command wasn't recognized");
 			}
+		}
+
+		//Проверка на то, нет ли в update ID кнопки.
+		//В отличие от первой проверки здесь нет message,
+		//поэтому используем callbackquery вместо него.
+		else if (update.hasCallbackQuery()) {
+			//Получаем id нажатой кнопки.
+			String callbackData = update.getCallbackQuery().getData();
+			//Получаем id сообщения.
+			long messageId = update.getCallbackQuery().getMessage().getMessageId();
+			//Получаем id чата.
+			long chatId = update.getCallbackQuery().getMessage().getChatId();
+
+			if (callbackData.equals(yesButtonId)) {
+				String text = "You pressed YES button";
+				//Метод позволяет изменить сообщение при знании ID сообщения.
+				EditMessageText editMessageText = new EditMessageText();
+				editMessageText.setChatId(chatId);
+				editMessageText.setText(text);
+				editMessageText.setMessageId((int)messageId);
+
+				try {
+					//Отпарвка сообщения.
+					execute(editMessageText);
+				} catch (TelegramApiException e) {
+					//Вывод логов при ошибке.
+					log.error(e.getMessage());
+				}
+
+			}
+			else if (callbackData.equals(noButtonId)) {
+				String text = "You pressed NO button";
+				EditMessageText editMessageText = new EditMessageText();
+				editMessageText.setChatId(chatId);
+				editMessageText.setText(text);
+				editMessageText.setMessageId((int)messageId);
+
+				try {
+					//Отпарвка сообщения.
+					execute(editMessageText);
+				} catch (TelegramApiException e) {
+					//Вывод логов при ошибке.
+					log.error(e.getMessage());
+				}
+			}
+		}
+	}
+
+	private void register(long chatId) {
+		//Создание сообщения.
+		SendMessage message = new SendMessage();
+		message.setChatId(chatId);
+		message.setText("Do you really want to register?");
+
+		//Создание клавиатуры с кнопками, которая будет появляться под сообщениями бота.
+		InlineKeyboardMarkup inlineKeyboardMarkup= new InlineKeyboardMarkup();
+		//Создание ряда этой клавиатуры.
+		List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
+		//Создание списка кнопок для ряда.
+		List<InlineKeyboardButton> rowInline = new ArrayList<>();
+
+		//Создание кнопки.
+		var yesButton = new InlineKeyboardButton();
+		//Указание текста кнопки.
+		yesButton.setText("YES");
+		//Установка идентификатора для того, чтобы бот понимал, какая к нопка нажата.
+		yesButton.setCallbackData(yesButtonId);
+
+		//Создание второй кнопки.
+		var noButton = new InlineKeyboardButton();
+		noButton.setText("NO");
+		noButton.setCallbackData(noButtonId);
+
+		//Добавляем кнопки в ряд.
+		rowInline.add(yesButton);
+		rowInline.add(noButton);
+
+		//Добавляем новый ряд в список рядов.
+		rowsInline.add(rowInline);
+
+		//Присваиваем ряд кнопок клавиатуре.
+		inlineKeyboardMarkup.setKeyboard(rowsInline);
+		//Добавляем клавиатуру к сообщению бота.
+		message.setReplyMarkup(inlineKeyboardMarkup);
+
+		try {
+			//Отпарвка сообщения.
+			execute(message);
+		} catch (TelegramApiException e) {
+			//Вывод логов при ошибке.
+			log.error(e.getMessage());
 		}
 	}
 
