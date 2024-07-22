@@ -151,7 +151,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         //Проверка на то, нет ли в update ID кнопки.
         //В отличие от первой проверки здесь нет message,
-        //поэтому используем callbackquery вместо него.
+        //поэтому используем CallBackQuery вместо него.
         else if (update.hasCallbackQuery()) {
             //Получаем id нажатой кнопки.
             String callbackData = update.getCallbackQuery().getData();
@@ -187,7 +187,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         //Добавляем клавиатуру к сообщению бота.
         message.setReplyMarkup(inlineKeyboardMarkup);
 
-        //Отпарвка сообщения пользователю.
+        //Отправка сообщения пользователю.
         executeMessage(message);
     }
 
@@ -239,7 +239,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         // чтобы бот показывал ее в ответ на сообщение пользователя.
 //        message.setReplyMarkup(keyboardMarkup);
 
-        //Отпарвка сообщения пользователю.
+        //Отправка сообщения пользователю.
         executeMessage(message);
 
     }
