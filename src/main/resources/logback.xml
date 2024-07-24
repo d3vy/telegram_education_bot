@@ -1,6 +1,6 @@
 <configuration>
 
-    <property name="HOME_LOG" value="/Coding/Logs/TelegramBot/var/log/app.log"/>
+    <property name="HOME_LOG" value="/Coding/Logs/TelegramSomeBot/var/log/app.log"/>
 
     <appender name="FILE-ROLLING" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${HOME_LOG}</file>
