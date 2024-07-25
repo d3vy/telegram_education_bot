@@ -15,7 +15,7 @@ public class Answer {
     @Column(name = "answer_text")
     private String answerText;
 
-    @ManyToOne(fetch = FetchType.LAZY) // Указываем связь с сущностью Question
+    @ManyToOne(fetch = FetchType.EAGER) // Указываем связь с сущностью Question
     @JoinColumn(name = "question_id", nullable = false) // Указываем имя колонки, которая будет хранить внешний ключ
     private Question question;
 

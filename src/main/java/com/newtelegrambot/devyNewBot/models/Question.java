@@ -17,7 +17,7 @@ public class Question {
     @Column(name = "question_text")
     private String questionText;
 
-    @OneToMany(mappedBy = "question")
+    @OneToMany(mappedBy = "question", fetch = FetchType.EAGER)
     private List<Answer> answers;
 
 }

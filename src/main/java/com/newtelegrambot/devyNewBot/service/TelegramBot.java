@@ -1,32 +1,24 @@
 package com.newtelegrambot.devyNewBot.service;
 
 import com.newtelegrambot.devyNewBot.config.BotConfig;
-import com.newtelegrambot.devyNewBot.models.Advertisement;
 import com.newtelegrambot.devyNewBot.models.Answer;
 import com.newtelegrambot.devyNewBot.models.Question;
+import com.newtelegrambot.devyNewBot.models.Response;
 import com.newtelegrambot.devyNewBot.models.User;
-import com.newtelegrambot.devyNewBot.repositories.AdvertisementRepository;
-import com.newtelegrambot.devyNewBot.repositories.AnswersRepository;
-import com.newtelegrambot.devyNewBot.repositories.QuestionRepository;
-import com.newtelegrambot.devyNewBot.repositories.UserRepository;
+import com.newtelegrambot.devyNewBot.repositories.*;
 import com.vdurmont.emoji.EmojiParser;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.*;
@@ -35,19 +27,29 @@ import java.util.*;
 @Component
 public class TelegramBot extends TelegramLongPollingBot {
 
-    final BotConfig config;
+    private final BotConfig config;
+
     private final UserRepository userRepository;
     private final AdvertisementRepository advertisementRepository;
     private final QuestionRepository questionRepository;
     private final AnswersRepository answersRepository;
-    private final Map<Long, Integer> userCurrentQuestionIndex = new HashMap<>();
+    private final ResponseRepository responseRepository;
+
+    private final Map<Long, String> questionsFromDatabase = new HashMap<>();
+    private final Map<Long, String> answersFromDatabase = new HashMap<>();
+
+    private String surveyState = ReadyForQuestion;
+    private long questionNumber = 1;
+
+    //Константы для survey.
+    static final String WaitingForAnswer = "WAITING_FOR_ANSWER";
+    static final String ReadyForQuestion = "READY_FOR_QUESTION";
 
     //Констаны для идентификаторов кнопок.
     static final String noButtonId = "NO_BUTTON";
     static final String yesButtonId = "YES_BUTTON";
 
     //Константа для команды /help: выводить пользователю все возможные команды.
-    @Value("${help.text}")
     static final String HELP_TEXT =
 
             """
@@ -73,12 +75,13 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     //Создание бота.
     //Здесь определяются команды для использования бота.
-    public TelegramBot(BotConfig config, UserRepository userRepository, AdvertisementRepository advertisementRepository, QuestionRepository questionRepository, AnswersRepository answersRepository) {
+    public TelegramBot(BotConfig config, UserRepository userRepository, AdvertisementRepository advertisementRepository, QuestionRepository questionRepository, AnswersRepository answersRepository, ResponseRepository responseRepository) {
         this.config = config;
         this.userRepository = userRepository;
         this.advertisementRepository = advertisementRepository;
         this.questionRepository = questionRepository;
         this.answersRepository = answersRepository;
+        this.responseRepository = responseRepository;
 
         List<BotCommand> listOfCommands = new ArrayList<>();
         listOfCommands.add(new BotCommand("/start", "get a welcome message"));
@@ -86,8 +89,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         listOfCommands.add(new BotCommand("/survey", "take a small poll about ..."));
         listOfCommands.add(new BotCommand("/mydata", "get your data stored"));
         listOfCommands.add(new BotCommand("/deletedata", "delete my data (bot history will be deleted with it)"));
-        listOfCommands.add(new BotCommand("/settings", "set your preferences"));
-        listOfCommands.add(new BotCommand("/register", "you can register yourself in bot"));
 
         try {
             this.execute(new SetMyCommands(listOfCommands, new BotCommandScopeDefault(), null));
@@ -155,9 +156,6 @@ public class TelegramBot extends TelegramLongPollingBot {
                                 "If you wanna register again - type /start");
                         break;
 
-                    case "/register":
-                        register(chatId);
-                        break;
 
                     default:
                         prepareAndSendMessage(chatId, "Command wasn't recognized");
@@ -182,140 +180,97 @@ public class TelegramBot extends TelegramLongPollingBot {
                 String text = "You pressed NO button";
                 executeEditMessageText(text, chatId, messageId);
             } else {
-                handleAnswer(chatId, callbackData);
+                handleAnswer(chatId, callbackData, messageId);
             }
         }
     }
 
     private void startSurvey(Long chatId) {
 
-        //Достаем список вопросов из базы данных.
-        List<Question> questions = (List<Question>) questionRepository.findAll();
+        var questions = questionRepository.findAll();
+        var answers = answersRepository.findAll();
 
-        // Сохраняем индекс первого вопроса для пользователя
-        userCurrentQuestionIndex.put(chatId, 0);
+        getQuestionsFromDatabase(questions);
+        getAnswerOptionsFromDatabase(answers);
 
-        if (!questions.isEmpty()) {
-            askQuestion(chatId, questions.getFirst());
-        } else {
-            prepareAndSendMessage(chatId, "There are no questions");
+
+        askQuestion(chatId, questionsFromDatabase.get(questionNumber));
+
+    }
+
+
+    private void getQuestionsFromDatabase(Iterable<Question> questions) {
+        for (Question question : questions) {
+            questionsFromDatabase.put(question.getId(), question.getQuestionText());
         }
     }
 
-    private void handleAnswer(long chatId, String answerText) {
-
-        // Получаем текущий индекс вопроса для пользователя
-        Integer currentQuestionIndex = userCurrentQuestionIndex.get(chatId);
-
-        //Получаем лист вопросов из базы данных.
-        List<Question> questions = (List<Question>) questionRepository.findAll();
-
-        if (currentQuestionIndex != null && currentQuestionIndex < questions.size()) {
-            //Получаем текущий вопрос по индексу.
-            Question currentQuestion = questions.get(currentQuestionIndex);
-
-            //Создаем новый объект ответа.
-            Answer usersAnswer = new Answer();
-            usersAnswer.setAnswerText(answerText);
-            usersAnswer.setQuestion(currentQuestion);
-
-            //Сохраняем ответ в базу данных.
-            answersRepository.save(usersAnswer);
-
-            //Увеличиваем индекс вопроса для следующего ответа
-            currentQuestionIndex++;
-            userCurrentQuestionIndex.put(chatId, currentQuestionIndex);
-
-            //Проверяем на наличие вопроса.
-            if (currentQuestionIndex < questions.size()) {
-                askQuestion(chatId, questions.get(currentQuestionIndex));
-            } else {
-                // Завершение опроса.
-                prepareAndSendMessage(chatId, "Thank you for taking the survey");
-                //Удаляем пользователя, чтобы сбросить состояние опроса
-                userCurrentQuestionIndex.remove(chatId);
-            }
-        } else {
-            //Если индекс не найден или превышает количество вопросов
-            prepareAndSendMessage(chatId, "There has been an error. Please start the survey again with the /survey command.");
+    private void getAnswerOptionsFromDatabase(Iterable<Answer> answers) {
+        for (Answer answer : answers) {
+            answersFromDatabase.put(answer.getId(), answer.getAnswerText());
         }
     }
 
-    private void askQuestion(long chatId, Question question) {
+    private void askQuestion(long chatId, String question) {
+        //Инициализация сообщения.
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
-        message.setText(question.getQuestionText());
-
+        message.setText(question);
+        //Создание клавиатуры с ответами из базы данных.
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
-        List<List<InlineKeyboardButton>> rowsInline = getInlineRowsForKeyboard(question);
+        List<List<InlineKeyboardButton>> rowsInline = getInlineRowsForKeyboard(answersFromDatabase);
         inlineKeyboardMarkup.setKeyboard(rowsInline);
         message.setReplyMarkup(inlineKeyboardMarkup);
 
-        executeMessage(message);
+
+        if (surveyState.equals(ReadyForQuestion)) {
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                log.error(e.getMessage());
+            }
+            surveyState = WaitingForAnswer;
+        }
+
+
     }
 
-    private static List<List<InlineKeyboardButton>> getInlineRowsForKeyboard(Question question) {
-        List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-        List<Answer> answers = question.getAnswers();
+    private void handleAnswer(long chatId, String callbackData, long messageId) {
 
-        for (Answer answer : answers) {
+        switch (callbackData) {
+            case "ANSWER_Good", "ANSWER_Bad", "ANSWER_Average" -> {
+                Response response = new Response();
+                response.setAnswer(callbackData.substring(7));
+                response.setQuestion(questionsFromDatabase.get(questionNumber));
+                responseRepository.save(response);
+            }
+        }
+        surveyState = ReadyForQuestion;
+
+        askNextQuestion(chatId);
+    }
+
+    private void askNextQuestion(long chatId) {
+        if (questionNumber <= questionsFromDatabase.size()) {
+            questionNumber++;
+            askQuestion(chatId, questionsFromDatabase.get(questionNumber));
+        }
+    }
+
+
+    private static List<List<InlineKeyboardButton>> getInlineRowsForKeyboard(Map<Long, String> answersFromDatabase) {
+        List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
+
+        for (int i = 1; i <= answersFromDatabase.size(); i++) {
             List<InlineKeyboardButton> rowInline = new ArrayList<>();
+            var answer = answersFromDatabase.get((long) i);
 
             var button = new InlineKeyboardButton();
-            button.setText(answer.getAnswerText());
-            button.setCallbackData(answer.getAnswerText());
-
+            button.setText(answer);
+            button.setCallbackData("ANSWER_" + answer);
             rowInline.add(button);
             rowsInline.add(rowInline);
         }
-        return rowsInline;
-    }
-
-
-    private void register(long chatId) {
-        //Создание сообщения.
-        SendMessage message = new SendMessage();
-        message.setChatId(chatId);
-        message.setText("Do you really want to register?");
-
-        //Создание клавиатуры с кнопками, которая будет появляться под сообщениями бота.
-        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
-
-        //Создание ряда клавиатуры.
-        List<List<InlineKeyboardButton>> rowsInline = getInlineRowsForKeyboard();
-
-        //Присваиваем ряд кнопок клавиатуре.
-        inlineKeyboardMarkup.setKeyboard(rowsInline);
-        //Добавляем клавиатуру к сообщению бота.
-        message.setReplyMarkup(inlineKeyboardMarkup);
-
-        //Отправка сообщения пользователю.
-        executeMessage(message);
-    }
-
-    private static List<List<InlineKeyboardButton>> getInlineRowsForKeyboard() {
-        List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-        //Создание списка кнопок для ряда.
-        List<InlineKeyboardButton> rowInline = new ArrayList<>();
-
-        //Создание кнопки.
-        var yesButton = new InlineKeyboardButton();
-        //Указание текста кнопки.
-        yesButton.setText("YES");
-        //Установка идентификатора для того, чтобы бот понимал, какая к нопка нажата.
-        yesButton.setCallbackData(yesButtonId);
-
-        //Создание второй кнопки.
-        var noButton = new InlineKeyboardButton();
-        noButton.setText("NO");
-        noButton.setCallbackData(noButtonId);
-
-        //Добавляем кнопки в ряд.
-        rowInline.add(yesButton);
-        rowInline.add(noButton);
-
-        //Добавляем новый ряд в список рядов.
-        rowsInline.add(rowInline);
         return rowsInline;
     }
 
@@ -360,46 +315,9 @@ public class TelegramBot extends TelegramLongPollingBot {
         message.setChatId(chatId);
         message.setText(messageToSend);
 
-        //Создание клавиатуры для выбора сдедующего действия.
-//        ReplyKeyboardMarkup keyboardMarkup = getReplyKeyboardMarkup();
-
-        //Привязка клавиатуры к сообщению,
-        // чтобы бот показывал ее в ответ на сообщение пользователя.
-//        message.setReplyMarkup(keyboardMarkup);
-
         //Отправка сообщения пользователю.
         executeMessage(message);
 
-    }
-
-    //Метод для создания клавиатуры с кнопками (рядом с полем ввода сообщения пользователем)
-    private static ReplyKeyboardMarkup getReplyKeyboardMarkup() {
-        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-
-        //Лист, содержащий все кнопки клавиаутры.
-        List<KeyboardRow> keyboardRows = new ArrayList<>();
-
-        //Инициализация ряда кнопок.
-        KeyboardRow row = new KeyboardRow();
-
-        //Добавление кнопок в ряд.
-        row.add("weather");
-        row.add("random joke");
-
-        //Добавление ряда в лист рядов с кнопоками.
-        //Ряд, который добавляется первым, становится верхним.
-        keyboardRows.add(row);
-
-        //Создание нового ряда
-        row = new KeyboardRow();
-        row.add("register");
-        row.add("check my data");
-        row.add("delete my data");
-        keyboardRows.add(row);
-
-        //Создание клавиатуры.
-        keyboardMarkup.setKeyboard(keyboardRows);
-        return keyboardMarkup;
     }
 
 
@@ -464,23 +382,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         userRepository.deleteById(chatId);
     }
 
-    //Метод для очистки чата с пользователем, который решил удалить свои данные из базы данных бота.
-    //Нужно доработать: пока что удаляется только последнее сообщение.
-//    private void deleteChatHistory(long chatId, Update update) {
-//        long messageId = update.getMessage().getMessageId();
-//        while (messageId > 0) {
-//            DeleteMessage deleteMessage = new DeleteMessage();
-//            deleteMessage.setChatId(chatId);
-//            deleteMessage.setMessageId((int) messageId);
-//            try {
-//                execute(deleteMessage);
-//            }catch (TelegramApiException e) {
-//                log.error(e.getMessage());
-//                break;
-//            }
-//            messageId=update.getMessage().getMessageId();
-//        }
-//    }
 
     //cron - это сервис, который в определенное время отправляет нечто(из Linux)
     //Имеет 6 параметров: секуны, минуты, часы, дата, месяц, день недели
